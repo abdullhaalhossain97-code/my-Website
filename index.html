@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function() {
+        // Intercept Vite HMR WebSocket connections in sandbox iframe where WebSocket proxying is not enabled
+        const NativeWebSocket = window.WebSocket;
+        if (NativeWebSocket) {
+          window.WebSocket = function(url, protocols) {
+            const urlStr = String(url || '');
+            const isViteHmr =
+              (typeof protocols === 'string' && (protocols === 'vite-hmr' || protocols === 'vite-ping')) ||
+              (Array.isArray(protocols) && (protocols.includes('vite-hmr') || protocols.includes('vite-ping'))) ||
+              urlStr.includes('token=') ||
+              urlStr.includes('vite-hmr') ||
+              urlStr.includes('@vite/client');
+
+            if (isViteHmr) {
+              const listeners = {};
+              const fakeWs = {
+                CONNECTING: 0,
+                OPEN: 1,
+                CLOSING: 2,
+                CLOSED: 3,
+                readyState: 0,
+                protocol: Array.isArray(protocols) ? (protocols[0] || '') : (protocols || ''),
+                url: urlStr,
+                binaryType: 'blob',
+                bufferedAmount: 0,
+                extensions: '',
+                onopen: null,
+                onclose: null,
+                onerror: null,
+                onmessage: null,
+                addEventListener: function(event, callback) {
+                  if (!listeners[event]) listeners[event] = [];
+                  listeners[event].push(callback);
+                },
+                removeEventListener: function(event, callback) {
+                  if (!listeners[event]) return;
+                  listeners[event] = listeners[event].filter(function(cb) { return cb !== callback; });
+                },
+                dispatchEvent: function() { return true; },
+                send: function() {},
+                close: function() {
+                  fakeWs.readyState = 3;
+                  if (typeof fakeWs.onclose === 'function') {
+                    try { fakeWs.onclose({ wasClean: true, code: 1000, reason: '' }); } catch (e) {}
+                  }
+                  if (listeners['close']) {
+                    listeners['close'].slice().forEach(function(cb) {
+                      try { cb({ wasClean: true, code: 1000, reason: '' }); } catch (e) {}
+                    });
+                  }
+                }
+              };
+
+              // Safely notify open event on next tick so Vite runner transport attaches listeners first
+              setTimeout(function() {
+                if (fakeWs.readyState === 0) {
+                  fakeWs.readyState = 1;
+                  const openEvent = { type: 'open' };
+                  if (typeof fakeWs.onopen === 'function') {
+                    try { fakeWs.onopen(openEvent); } catch (e) {}
+                  }
+                  if (listeners['open']) {
+                    listeners['open'].slice().forEach(function(cb) {
+                      try { cb(openEvent); } catch (e) {}
+                    });
+                  }
+                }
+              }, 0);
+
+              return fakeWs;
+            }
+
+            return new NativeWebSocket(url, protocols);
+          };
+
+          window.WebSocket.prototype = NativeWebSocket.prototype;
+          window.WebSocket.CONNECTING = 0;
+          window.WebSocket.OPEN = 1;
+          window.WebSocket.CLOSING = 2;
+          window.WebSocket.CLOSED = 3;
+        }
+
+        // Catch and prevent any potential unhandled rejection or error from Vite client transport
+        window.addEventListener('unhandledrejection', function(event) {
+          if (
+            event &&
+            event.reason &&
+            (String(event.reason.message || event.reason).includes('WebSocket') ||
+             String(event.reason.stack || '').includes('createWebSocketModuleRunnerTransport'))
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        });
+        window.addEventListener('error', function(event) {
+          if (
+            event &&
+            (String(event.message).includes('WebSocket') ||
+             String(event.filename || '').includes('@vite/client') ||
+             String(event.error?.stack || '').includes('createWebSocketModuleRunnerTransport'))
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        });
+      })();
+    </script>
+    <title>Md. Hossen Ali | Professional Portfolio & Admin Portal</title>
+    <meta name="description" content="Full-stack developer portfolio with live project demos, source code, emergency hotline, secure admin dashboard, payment gateway, multi-language support, and offline PWA capability." />
+    <meta property="og:title" content="Md. Hossen Ali | Professional Portfolio & Admin Portal" />
+    <meta property="og:description" content="Full-stack developer portfolio with live project demos, source code, emergency hotline, secure admin dashboard, payment gateway, multi-language support, and offline PWA capability." />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Hossen Ali Portfolio" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-slate-950 text-slate-100 antialiased selection:bg-indigo-500 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

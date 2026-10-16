@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "Ali Hossain Portfolio & Admin",
+  "short_name": "AliPortfolio",
+  "description": "Professional Full-Stack Developer Portfolio with Project Demos, Code, Emergency Hotline, and Admin Suite",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

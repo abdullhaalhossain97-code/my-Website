@@ -1,0 +1,527 @@
+import React, { useState } from 'react';
+import { 
+  X, 
+  CreditCard, 
+  ShieldCheck, 
+  CheckCircle, 
+  Download, 
+  ArrowRight,
+  Sparkles,
+  Smartphone,
+  Building,
+  AlertCircle
+} from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { ServicePackage, Language, ProfileInfo, PaymentRecord } from '../types';
+import { TRANSLATIONS } from '../data/translations';
+import { INITIAL_PROFILE } from '../data/initialData';
+
+interface PaymentModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  lang: Language;
+  services: ServicePackage[];
+  profile?: ProfileInfo;
+  selectedService?: ServicePackage | null;
+  onSubmitPayment: (data: Omit<PaymentRecord, 'id' | 'createdAt' | 'status'>) => Promise<{ success: boolean; payment: PaymentRecord }>;
+}
+
+export const PaymentModal: React.FC<PaymentModalProps> = ({
+  isOpen,
+  onClose,
+  lang,
+  services,
+  profile: propProfile,
+  selectedService: initialService,
+  onSubmitPayment
+}) => {
+  const profile = propProfile && propProfile.name ? propProfile : INITIAL_PROFILE;
+  const t = TRANSLATIONS[lang];
+
+  const [selectedServiceId, setSelectedServiceId] = useState<string>(
+    initialService ? initialService.id : (services[1]?.id || services[0]?.id || 'custom')
+  );
+  const [currency, setCurrency] = useState<'BDT' | 'USD'>('BDT');
+  const [method, setMethod] = useState<'bkash' | 'nagad' | 'rocket' | 'stripe' | 'paypal'>('bkash');
+  const [clientName, setClientName] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [customAmount, setCustomAmount] = useState<number>(5000);
+  const [transactionId, setTransactionId] = useState('');
+  const [cardHolder, setCardHolder] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [notes, setNotes] = useState('');
+  
+  const [submitting, setSubmitting] = useState(false);
+  const [completedPayment, setCompletedPayment] = useState<PaymentRecord | null>(null);
+
+  // Selected package
+  const currentService = services.find(s => s.id === selectedServiceId);
+  const finalAmount = currentService 
+    ? (currency === 'BDT' ? currentService.priceBdt : currentService.priceUsd)
+    : customAmount;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clientName || !clientEmail) return;
+
+    setSubmitting(true);
+    try {
+      const generatedTrxId = transactionId || `TXN-${Date.now().toString(36).toUpperCase()}`;
+      const result = await onSubmitPayment({
+        serviceId: selectedServiceId,
+        serviceName: currentService ? currentService.name : 'Custom Engineering Milestone',
+        clientName,
+        clientEmail,
+        clientPhone,
+        amount: finalAmount,
+        currency,
+        method,
+        transactionId: generatedTrxId,
+        notes
+      });
+
+      if (result.success) {
+        setCompletedPayment(result.payment);
+        try {
+          confetti({
+            particleCount: 80,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+        } catch {
+          // ignore if confetti fails
+        }
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const downloadReceipt = () => {
+    if (!completedPayment) return;
+    const receiptContent = `================================================
+OFFICIAL PAYMENT RECEIPT - MD. HOSSEN ALI PORTFOLIO
+================================================
+Receipt ID: ${completedPayment.id}
+Date: ${completedPayment.createdAt}
+Recipient: Md. Hossen Ali (mhossenali740@gmail.com)
+Direct Hotline: +8801876357998
+
+CLIENT DETAILS:
+- Name: ${completedPayment.clientName}
+- Email: ${completedPayment.clientEmail}
+- Phone: ${completedPayment.clientPhone || 'N/A'}
+
+TRANSACTION DETAILS:
+- Service / Scope: ${completedPayment.serviceName}
+- Payment Gateway: ${completedPayment.method.toUpperCase()}
+- Amount Paid: ${completedPayment.currency} ${completedPayment.amount.toLocaleString()}
+- Transaction ID (TrxID): ${completedPayment.transactionId}
+- Status: VERIFIED & CONFIRMED
+
+ADMIN NOTIFICATION:
+A copy of this transaction has been dispatched to mhossenali740@gmail.com.
+Thank you for your business!
+================================================`;
+
+    const blob = new Blob([receiptContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Receipt_${completedPayment.id}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+      <div className="relative w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-950 p-6 sm:p-8 shadow-2xl my-8">
+        
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 rounded-full p-2 text-slate-400 hover:text-white hover:bg-slate-900 transition"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        {!completedPayment ? (
+          <div>
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
+                <CreditCard className="h-6 w-6 text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="text-xl sm:text-2xl font-bold text-white">
+                  {t.payment.modalTitle}
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-400">
+                  {t.payment.subtitle}
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              
+              {/* Currency & Package Selection */}
+              <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    {t.payment.selectPackage}
+                  </label>
+                  {/* Currency Toggle */}
+                  <div className="flex items-center gap-1 rounded-lg bg-slate-950 p-1 border border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setCurrency('BDT')}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
+                        currency === 'BDT' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      BDT (৳)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrency('USD')}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
+                        currency === 'USD' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      USD ($)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {services.map(srv => {
+                    const active = selectedServiceId === srv.id;
+                    const price = currency === 'BDT' ? `৳${srv.priceBdt.toLocaleString()}` : `$${srv.priceUsd}`;
+                    const name = lang === 'bn' ? srv.nameBn : srv.name;
+
+                    return (
+                      <div
+                        key={srv.id}
+                        onClick={() => setSelectedServiceId(srv.id)}
+                        className={`p-3 rounded-xl border text-left cursor-pointer transition ${
+                          active
+                            ? 'border-emerald-500 bg-emerald-950/30 text-white'
+                            : 'border-slate-800 bg-slate-900/40 text-slate-300 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <p className="text-xs font-bold leading-tight">{name}</p>
+                          <span className="text-xs font-extrabold text-emerald-400 font-mono whitespace-nowrap">
+                            {price}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  
+                  {/* Custom Amount option */}
+                  <div
+                    onClick={() => setSelectedServiceId('custom')}
+                    className={`p-3 rounded-xl border text-left cursor-pointer transition ${
+                      selectedServiceId === 'custom'
+                        ? 'border-emerald-500 bg-emerald-950/30 text-white'
+                        : 'border-slate-800 bg-slate-900/40 text-slate-300 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <p className="text-xs font-bold">{t.payment.customAmount}</p>
+                      {selectedServiceId === 'custom' && (
+                        <input
+                          type="number"
+                          value={customAmount}
+                          onChange={e => setCustomAmount(Math.max(1, Number(e.target.value)))}
+                          onClick={e => e.stopPropagation()}
+                          className="w-24 rounded-md border border-slate-700 bg-slate-950 px-2 py-0.5 text-xs text-emerald-400 font-mono text-right"
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Total Summary Row */}
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-400">
+                    {lang === 'bn' ? 'মোট প্রদেয় অর্থ:' : 'Total Payable Amount:'}
+                  </span>
+                  <span className="text-lg font-black text-emerald-400 font-mono">
+                    {currency === 'BDT' ? `৳${finalAmount.toLocaleString()}` : `$${finalAmount.toLocaleString()}`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment Methods */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2.5">
+                  {t.payment.paymentMethod}
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMethod('bkash')}
+                    className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition text-xs font-bold ${
+                      method === 'bkash'
+                        ? 'border-pink-500 bg-pink-950/30 text-pink-300 shadow-md'
+                        : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Smartphone className="h-4 w-4 text-pink-400" />
+                    <span>bKash (বিকাশ)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMethod('nagad')}
+                    className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition text-xs font-bold ${
+                      method === 'nagad'
+                        ? 'border-amber-500 bg-amber-950/30 text-amber-300 shadow-md'
+                        : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Smartphone className="h-4 w-4 text-amber-400" />
+                    <span>Nagad (নগদ)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMethod('rocket')}
+                    className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition text-xs font-bold ${
+                      method === 'rocket'
+                        ? 'border-purple-500 bg-purple-950/30 text-purple-300 shadow-md'
+                        : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Building className="h-4 w-4 text-purple-400" />
+                    <span>Rocket (রকেট)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMethod('stripe')}
+                    className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition text-xs font-bold ${
+                      method === 'stripe'
+                        ? 'border-indigo-500 bg-indigo-950/30 text-indigo-300 shadow-md'
+                        : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <CreditCard className="h-4 w-4 text-indigo-400" />
+                    <span>Card / Stripe</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Instructions based on method */}
+              <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3.5 text-xs space-y-2">
+                {method === 'bkash' && (
+                  <div>
+                    <p className="font-semibold text-pink-300">
+                      {t.payment.bkashGuide}
+                    </p>
+                    <p className="text-slate-400 mt-1">
+                      {lang === 'bn' 
+                        ? 'বিকাশ অ্যাপ থেকে "Send Money" বা "Payment" করুন উল্লিখিত নম্বরে। এরপর এসএমএস থেকে TrxID নিচে লিখুন।' 
+                        : 'Open bKash App, Send Money or Pay to +8801876357998. Enter the Transaction ID from the SMS below.'}
+                    </p>
+                  </div>
+                )}
+                {method === 'nagad' && (
+                  <div>
+                    <p className="font-semibold text-amber-300">
+                      {t.payment.nagadGuide}
+                    </p>
+                    <p className="text-slate-400 mt-1">
+                      {lang === 'bn' 
+                        ? 'নগদ অ্যাপ বা *167# থেকে সেন্ড মানি করুন +৮৮০১৮৭৬৩৫৭৯৯৮ নম্বরে এবং ট্রানজেকশন আইডি প্রদান করুন।' 
+                        : 'Send Money to +8801876357998 using Nagad App, then input your TrxID below.'}
+                    </p>
+                  </div>
+                )}
+                {method === 'rocket' && (
+                  <div>
+                    <p className="font-semibold text-purple-300">
+                      {t.payment.rocketGuide}
+                    </p>
+                    <p className="text-slate-400 mt-1">
+                      {lang === 'bn' 
+                        ? 'রকেট একাউন্ট নম্বর: +৮৮০১৮৭৬৩৫৭৯৯৮ (পার্সোনাল)। সেন্ড মানি করে ট্রানজেকশন আইডি দিন।' 
+                        : 'Send Money to Rocket account +8801876357998 and enter the transaction reference.'}
+                    </p>
+                  </div>
+                )}
+                {method === 'stripe' && (
+                  <div>
+                    <p className="font-semibold text-indigo-300">
+                      {t.payment.stripeGuide}
+                    </p>
+                    <p className="text-slate-400 mt-1">
+                      {lang === 'bn' 
+                        ? 'আন্তর্জাতিক ভিসা/মাস্টারকার্ড সুরক্ষিতভাবে প্রসেস করা হবে।' 
+                        : 'Secure tokenized SSL/TLS card checkout with fraud mitigation.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Client Info Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    {t.payment.fullName} *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={clientName}
+                    onChange={e => setClientName(e.target.value)}
+                    placeholder="e.g. Tanvir Ahmed"
+                    className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    {t.payment.email} *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={clientEmail}
+                    onChange={e => setClientEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    {t.payment.phone}
+                  </label>
+                  <input
+                    type="text"
+                    value={clientPhone}
+                    onChange={e => setClientPhone(e.target.value)}
+                    placeholder="+88018XXXXXXXX"
+                    className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    {t.payment.trxLabel}
+                  </label>
+                  <input
+                    type="text"
+                    value={transactionId}
+                    onChange={e => setTransactionId(e.target.value)}
+                    placeholder={t.payment.trxPlaceholder}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Submit CTA */}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-700/25 transition cursor-pointer disabled:opacity-50"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                <span>{submitting ? 'Processing Payment...' : t.payment.submitBtn}</span>
+              </button>
+
+              <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400">
+                <AlertCircle className="h-3.5 w-3.5 text-sky-400" />
+                <span>
+                  {lang === 'bn' 
+                    ? 'সকল লেনদেনের রিসিট mhossenali740@gmail.com এ সংরক্ষিত হয়।' 
+                    : 'Instant notification dispatched to mhossenali740@gmail.com upon confirmation.'}
+                </span>
+              </div>
+            </form>
+          </div>
+        ) : (
+          /* Payment Success & Receipt View */
+          <div className="text-center space-y-6 py-4">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+              <CheckCircle className="h-10 w-10 text-emerald-400" />
+            </div>
+
+            <div>
+              <h3 className="text-2xl font-bold text-white">
+                {t.payment.successTitle}
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-md mx-auto">
+                {t.payment.successSub}
+              </p>
+            </div>
+
+            {/* Receipt Summary Card */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-5 text-left space-y-3 font-mono text-xs">
+              <div className="flex justify-between border-b border-slate-800 pb-2">
+                <span className="text-slate-400">Receipt ID:</span>
+                <span className="font-bold text-white">{completedPayment.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Client:</span>
+                <span className="text-slate-200">{completedPayment.clientName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Email:</span>
+                <span className="text-slate-200">{completedPayment.clientEmail}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Service:</span>
+                <span className="text-slate-200">{completedPayment.serviceName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Method:</span>
+                <span className="text-emerald-400 uppercase font-bold">{completedPayment.method}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">TrxID:</span>
+                <span className="text-sky-300">{completedPayment.transactionId}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-800 pt-2 text-sm">
+                <span className="font-bold text-white">Amount Paid:</span>
+                <span className="font-bold text-emerald-400">
+                  {completedPayment.currency} {completedPayment.amount.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={downloadReceipt}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 py-2.5 text-xs font-bold text-white transition shadow cursor-pointer"
+              >
+                <Download className="h-4 w-4" />
+                <span>{t.payment.downloadReceipt}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setCompletedPayment(null);
+                  onClose();
+                }}
+                className="flex-1 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 py-2.5 text-xs font-semibold text-slate-200 transition cursor-pointer"
+              >
+                {t.payment.close}
+              </button>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+};
